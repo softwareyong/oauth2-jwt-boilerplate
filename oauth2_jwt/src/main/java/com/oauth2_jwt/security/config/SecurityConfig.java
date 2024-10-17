@@ -1,7 +1,9 @@
 package com.oauth2_jwt.security.config;
 
+import com.oauth2_jwt.domain.auth.repository.RefreshRepository;
 import com.oauth2_jwt.domain.auth.service.CustomOAuth2UserService;
 import com.oauth2_jwt.security.handler.CustomSuccessHandler;
+import com.oauth2_jwt.security.jwt.CustomLogoutFilter;
 import com.oauth2_jwt.security.jwt.JWTFilter;
 import com.oauth2_jwt.security.jwt.JWTUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,6 +15,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.logout.LogoutFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 
@@ -28,6 +31,7 @@ public class SecurityConfig {
     private final CustomOAuth2UserService customOAuth2UserService;
     private final CustomSuccessHandler customSuccessHandler;
     private final JWTUtil jwtUtil;
+    private final RefreshRepository refreshRepository;
 
 //    private final CustomSuccessHandler customSuccessHandler;
 
@@ -44,7 +48,7 @@ public class SecurityConfig {
                 configuration.setAllowCredentials(true);
                 configuration.setAllowedHeaders(Collections.singletonList("*"));
                 configuration.setMaxAge(3600L);
-                configuration.setExposedHeaders(Collections.singletonList("Authorization"));
+                configuration.setExposedHeaders(Collections.singletonList("access"));
                 return configuration;
             }
         }));
@@ -65,6 +69,7 @@ public class SecurityConfig {
 
         // JWT 필터 설정
         http.addFilterBefore(new JWTFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(new CustomLogoutFilter(jwtUtil, refreshRepository), LogoutFilter.class);
 
         // 세션 설정: STATELESS
         http.sessionManagement(session -> session.sessionCreationPolicy(STATELESS));
@@ -80,6 +85,8 @@ public class SecurityConfig {
 
     private static final String[] WHITE_LIST_URL = {
             "/",
+            "/reissue", // 엑세스토큰 리프레시 토큰으로 재발급 경로
+            "/access", // 첫 로그인시, 엑세스 토큰 헤더 전달을 위한 경로
             "/swagger-ui.html"
     };
 

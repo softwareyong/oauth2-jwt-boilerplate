@@ -1,6 +1,8 @@
 package com.oauth2_jwt.security.handler;
 
 import com.oauth2_jwt.domain.auth.dto.CustomOAuth2User;
+import com.oauth2_jwt.domain.auth.entity.RefreshEntity;
+import com.oauth2_jwt.domain.auth.repository.RefreshRepository;
 import com.oauth2_jwt.security.jwt.JWTUtil;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -13,16 +15,18 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Date;
 import java.util.Iterator;
 
 @Component
 public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
     private final JWTUtil jwtUtil;
+    private final RefreshRepository refreshRepository;
 
-    public CustomSuccessHandler(JWTUtil jwtUtil) {
-
+    public CustomSuccessHandler(JWTUtil jwtUtil, RefreshRepository refreshRepository) {
         this.jwtUtil = jwtUtil;
+        this.refreshRepository = refreshRepository;
     }
 
     @Override
@@ -38,17 +42,37 @@ public class CustomSuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         GrantedAuthority auth = iterator.next();
         String role = auth.getAuthority();
 
-        String token = jwtUtil.createJwt(username, role, 60*60*60L);
+        // 토큰 생성
+        String access = jwtUtil.createJwt("access", username, role, 600000L);
+        String refresh = jwtUtil.createJwt("refresh", username, role, 86400000L);
 
-        response.addCookie(createCookie("Authorization", token));
+        //Refresh 토큰 저장
+        addRefreshEntity(username, refresh, 86400000L);
+
+        //응답 설정
+        response.setHeader("access", access); // 응답헤더에 엑세스 토큰
+        response.addCookie(createCookie("refresh", refresh)); // 응답쿠키에 리프레시 토큰
+        //response.setStatus(HttpStatus.OK.value()); 추후 exception 코드로 변경
         response.sendRedirect("http://localhost:3000/");
+    }
+
+    private void addRefreshEntity(String username, String refresh, Long expiredMs) {
+
+        Date date = new Date(System.currentTimeMillis() + expiredMs);
+
+        RefreshEntity refreshEntity = new RefreshEntity();
+        refreshEntity.setUsername(username);
+        refreshEntity.setRefresh(refresh);
+        refreshEntity.setExpiration(date.toString());
+
+        refreshRepository.save(refreshEntity);
     }
 
     private Cookie createCookie(String key, String value) {
 
         Cookie cookie = new Cookie(key, value);
-        cookie.setMaxAge(60*60*60);
-        //cookie.setSecure(true);
+        cookie.setMaxAge(24*60*60);
+//        cookie.setSecure(true);
         cookie.setPath("/");
         cookie.setHttpOnly(true);
 
